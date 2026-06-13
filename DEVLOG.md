@@ -63,3 +63,15 @@ Today I worked on the result storing. I wrote the abstract class for how I wante
 ### Decision I made:
 
 ### What to do next:
+## 2026-06-12
+
+### What I worked on:
+Today I worked on the retry logic for the broker system. I wrote three functions, one to retry a task, one to check to see if a task should be moved to the failed task queue, and one that adds the task to the failed task queue. 
+### What I struggled with:
+I struggled with understanding how to create a new queue in the broker list for the failed task.
+
+### Decision I made:
+I decided to add a delay before each retry so the workers will not continuously retry task. I also added an attempt amount to decided when worker should stop retrying a task.
+
+### What to do next:
+

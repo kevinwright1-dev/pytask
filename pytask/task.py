@@ -10,6 +10,8 @@ def configure(broker):
 class Task():
     def __init__(self, fn):
         self.fn = fn
+    def __call__(self, *args, **kwargs):
+        return self.fn(*args, **kwargs)
     def delay(self, *args, **kwargs):
         task_id = str(uuid.uuid4())
         message_dict = {
