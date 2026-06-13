@@ -16,7 +16,8 @@ class Task():
             "task_id": task_id,
             "fn": self.fn.__name__,
             "args": args,
-            "kwargs": kwargs
+            "kwargs": kwargs,
+            "attempt": 0
         }
         _broker.enqueue(message_dict)
         return task_id
