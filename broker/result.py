@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import json
 import redis
 import sqlite3
 
@@ -14,12 +15,15 @@ class RedisResultStore(ResultStore):
     def __init__(self, host="localhost", port=6379):
         self.r = redis.Redis(host=host, port=port)
     def save_result(self, task_id, status, value):
-        self.r.hset(task_id, mapping={"status": status, "value": value})
+        self.r.hset(task_id, mapping={"status": status, "value": json.dumps(value)})
     def get_result(self, task_id):
         result = self.r.hgetall(task_id)
         if not result:
             return None
-        return result
+        return {
+            "status": result[b"status"].decode(),
+            "value": json.loads(result[b"value"])
+        }
 
 class SQLiteResultStore(ResultStore):
     def __init__(self):
