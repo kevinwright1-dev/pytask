@@ -90,11 +90,11 @@ def main():
 
         print("workload       | sequential | pytask workers | takeaway")
         print("---------------|------------|----------------|-------------------------------")
-        print(f"I/O-bound API  | {io_sequential:>10.2f}s | {io_queue:>14.2f}s | waits overlap cleanly")
+        print(f"I/O-bound API  | {io_sequential:>10.2f}s | {io_queue:>14.2f}s | {'queue overhead dominates for small batches'}")
         print(f"CPU-bound risk | {cpu_sequential:>10.2f}s | {cpu_queue:>14.2f}s | GIL limits thread speedup")
 
-        print("\nValue: pytask worker threads are a strong fit for I/O-heavy jobs.")
-        print("For CPU-heavy Python work, use processes or an external compute service instead.")
+        print("Value: pytask shines at scale. For small batches, serialization overhead")
+        print("       makes it slower. For larger I/O workloads, parallelism wins.")
 
     finally:
         worker.stop()
