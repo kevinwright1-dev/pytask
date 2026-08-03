@@ -66,7 +66,7 @@ class SQLiteResultStore(ResultStore):
         """Insert or update the result for a task id."""
 
         sql = "INSERT OR REPLACE INTO tasks(task_id, status, value) VALUES(?,?,?)"
-        self.cursor.execute(sql,(task_id, status, value))
+        self.cursor.execute(sql,(task_id, status, json.dumps(value)))
         self.conn.commit()
 
     def get_result(self, task_id):

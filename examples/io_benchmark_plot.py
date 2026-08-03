@@ -2,12 +2,6 @@
 
 Run with:
     python examples/io_benchmark_plot.py
-
-The point of this benchmark is consistency. Instead of one lucky timing, it
-runs increasing workloads and plots both lines:
-
-    x-axis: number of simulated I/O tasks
-    y-axis: elapsed seconds
 """
 
 import sys
@@ -22,18 +16,11 @@ from pytask.broker.result import RedisResultStore
 from pytask.broker.worker import WorkerPool
 from pytask.task import configure, task
 
-
-QUEUE = "example:io-benchmark"
 PLOT_PATH = Path(__file__).with_name("io_benchmark.png")
-
-broker = RedisBroker(queue_name=QUEUE)
-configure(broker)
-results = RedisResultStore()
 
 
 @task
 def fetch_customer_profile(customer_id, latency=0.35):
-    # Simulate network I/O that workers can overlap.
     time.sleep(latency)
     return {"customer_id": customer_id, "tier": "standard"}
 
@@ -45,7 +32,7 @@ def run_sequential(count):
     return time.time() - start
 
 
-def wait_for_results(task_ids, timeout=30):
+def wait_for_results(task_ids, results, timeout=30):
     deadline = time.time() + timeout
     while time.time() < deadline:
         if all(results.get_result(task_id) for task_id in task_ids):
@@ -54,12 +41,12 @@ def wait_for_results(task_ids, timeout=30):
     raise TimeoutError("Timed out waiting for benchmark tasks")
 
 
-def run_with_queue(count):
+def run_with_queue(count, results):
     task_ids = []
     start = time.time()
     for customer_id in range(count):
         task_ids.append(fetch_customer_profile.delay(customer_id))
-    wait_for_results(task_ids)
+    wait_for_results(task_ids, results)
     elapsed = time.time() - start
     results.r.delete(*task_ids)
     return elapsed
@@ -69,8 +56,7 @@ def plot_results(workloads, sequential_times, queue_times):
     try:
         import matplotlib.pyplot as plt
     except ImportError:
-        print("\nmatplotlib is not installed, so no PNG chart was written.")
-        print("Install it with `pip install matplotlib` and rerun to create the plot.")
+        print("\nmatplotlib is not installed.")
         return
 
     plt.figure(figsize=(8, 5))
@@ -87,6 +73,11 @@ def plot_results(workloads, sequential_times, queue_times):
 
 
 def main():
+    QUEUE = "example:io-benchmark"
+    broker = RedisBroker(queue_name=QUEUE)
+    configure(broker)
+    results = RedisResultStore()
+
     workloads = [2, 4, 6, 8, 10]
     sequential_times = []
     queue_times = []
@@ -105,7 +96,7 @@ def main():
         for count in workloads:
             broker.r.delete(QUEUE)
             seq = run_sequential(count)
-            queued = run_with_queue(count)
+            queued = run_with_queue(count, results)
             sequential_times.append(seq)
             queue_times.append(queued)
             print(f"{count:>5} | {seq:>10.2f}s | {queued:>14.2f}s | {seq / queued:>6.2f}x")

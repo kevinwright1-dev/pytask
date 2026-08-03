@@ -2,10 +2,6 @@
 
 Run with:
     python examples/dashboard_flood_test.py
-
-This demonstrates operational visibility. A queue is most useful when you can
-see whether workers are keeping up, whether pending work is draining, and
-whether anything has landed in the dead-letter queue.
 """
 
 import sys
@@ -24,24 +20,16 @@ from pytask.broker.worker import WorkerPool
 from pytask.task import configure, task
 
 
-QUEUE = "default"
-
-broker = RedisBroker(queue_name=QUEUE)
-configure(broker)
-results = RedisResultStore()
-
-
 @task
 def generate_thumbnail(image_name, size="512x512"):
-    # Simulate a slow image-processing job.
     time.sleep(0.2)
     return f"{image_name} rendered at {size}"
 
 
-def wait_for_all(task_ids, timeout=20):
+def wait_for_all(task_ids, results, timeout=20):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        finished = [task_id for task_id in task_ids if results.get_result(task_id)]
+        finished = [t for t in task_ids if results.get_result(t)]
         if len(finished) == len(task_ids):
             return
         time.sleep(0.1)
@@ -49,6 +37,11 @@ def wait_for_all(task_ids, timeout=20):
 
 
 def main():
+    QUEUE = "default"
+    broker = RedisBroker(queue_name=QUEUE)
+    configure(broker)
+    results = RedisResultStore()
+
     broker.r.delete(QUEUE, "dead_letter")
     worker = WorkerPool(broker, num_workers=6)
     worker.start()
@@ -66,7 +59,6 @@ def main():
         dashboard = Dashboard(broker)
         started = time.time()
 
-        # Use a bounded live display so this demo can finish.
         with Live(dashboard.make_table(), refresh_per_second=4) as live:
             while True:
                 live.update(dashboard.make_table())
@@ -74,7 +66,7 @@ def main():
                     break
                 time.sleep(0.25)
 
-        wait_for_all(task_ids)
+        wait_for_all(task_ids, results)
         elapsed = time.time() - started
 
         print(f"\nAfter: 60 jobs completed in {elapsed:.2f}s with 6 workers.")
@@ -83,8 +75,6 @@ def main():
     finally:
         worker.stop()
         worker.result.r.close()
-        if "dashboard" in locals():
-            dashboard.r.close()
         if task_ids:
             results.r.delete(*task_ids)
         broker.r.delete(QUEUE, "dead_letter")

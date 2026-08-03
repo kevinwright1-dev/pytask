@@ -1,5 +1,5 @@
 import threading
-import sys
+
 from .base import Broker
 from pytask.broker.result import RedisResultStore
 
@@ -40,8 +40,11 @@ class WorkerPool:
                 args = message["args"]
                 kwargs = message ["kwargs"]
 
-                module = sys.modules["__main__"]
-                fn = getattr(module, fn_name)
+                from pytask.task import _registry
+                fn = _registry.get(fn_name)
+                if fn is None:
+                    print(f"Unknown task: {fn_name}")
+                    continue
 
                 result = fn(*args, **kwargs)
                 self.result.save_result(message["task_id"], "SUCCESS", result)

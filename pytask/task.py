@@ -3,6 +3,8 @@ import uuid
 from .broker.base import Broker
 
 _broker = None
+_registry = {}
+
 
 def configure(broker):
     """Choose the broker that all future .delay() calls should enqueue into.
@@ -50,4 +52,5 @@ class Task():
 
 def task(fn):
     """Decorator that turns a function into a Task wrapper."""
+    _registry[fn.__name__] = fn
     return Task(fn)
