@@ -3,6 +3,7 @@ import pytest
 from pytask.broker.result import RedisResultStore, SQLiteResultStore
 
 
+
 @pytest.fixture
 def sqlite_store(tmp_path, monkeypatch):
     """Create a SQLiteResultStore in a temporary working directory."""

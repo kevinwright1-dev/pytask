@@ -30,16 +30,14 @@ results = RedisResultStore()
 
 @task
 def call_shipping_rate_api(shipment_id, latency=0.3):
-    # This is I/O-bound: it mostly waits. Worker threads can overlap that wait.
+    # I/O waits can overlap across worker threads.
     time.sleep(latency)
     return f"rate quote ready for shipment {shipment_id}"
 
 
 @task
 def score_fraud_risk(order_id, iterations=1_200_000):
-    # This is CPU-bound pure Python: it spends its time executing bytecode.
-    # Worker threads contend for the GIL, so total elapsed time usually does not
-    # improve much and can even get worse once queue overhead is included.
+    # Pure Python CPU work competes for the GIL.
     score = 0
     for i in range(iterations):
         score = (score + (i * 31) % 97) % 10_000

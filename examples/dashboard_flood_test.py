@@ -33,9 +33,7 @@ results = RedisResultStore()
 
 @task
 def generate_thumbnail(image_name, size="512x512"):
-    # Thumbnailing, PDF rendering, and video transcoding are good queue jobs:
-    # they are small, repeatable, and slow enough that you do not want them in
-    # a request/response path.
+    # Simulate a slow image-processing job.
     time.sleep(0.2)
     return f"{image_name} rendered at {size}"
 
@@ -68,9 +66,7 @@ def main():
         dashboard = Dashboard(broker)
         started = time.time()
 
-        # Dashboard.start() is intentionally infinite for a real terminal
-        # monitor. For an example script, we use the same make_table() method
-        # inside a bounded Rich Live loop so the script exits cleanly.
+        # Use a bounded live display so this demo can finish.
         with Live(dashboard.make_table(), refresh_per_second=4) as live:
             while True:
                 live.update(dashboard.make_table())

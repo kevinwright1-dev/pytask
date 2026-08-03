@@ -7,6 +7,7 @@ from pytask.broker.redis import RedisBroker
 from pytask.broker.socket import SocketBroker, start_server
 
 
+
 @pytest.fixture
 def redis_broker(monkeypatch):
     """Provide a RedisBroker backed by fakeredis, skipping if unavailable."""

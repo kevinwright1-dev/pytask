@@ -3,6 +3,7 @@ from unittest.mock import Mock
 from pytask.broker.retry import move_to_dead_letter, retry, should_dead_letter
 
 
+
 def test_retry_increments_attempt_by_one(monkeypatch, mock_broker, message):
     """Verify retry advances the attempt count exactly once per requeue."""
     monkeypatch.setattr("pytask.broker.retry.time.sleep", Mock())

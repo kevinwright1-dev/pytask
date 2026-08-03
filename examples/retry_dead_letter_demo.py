@@ -34,7 +34,7 @@ QUEUE = "example:retry"
 broker = RedisBroker(queue_name=QUEUE)
 configure(broker)
 
-# Make the example deterministic while still using retry()'s public formula.
+# Keep retry jitter predictable for the demo.
 random.seed(7)
 
 
@@ -54,12 +54,7 @@ def invoice_provider(message):
 
 
 def patch_retry_sleep_for_demo(scale=0.25):
-    """Keep the demo brisk while printing the real retry delay.
-
-    retry() sleeps inside the helper. For a live demo, waiting 1 + 2 + 4 + 8
-    seconds is understandable but a little tedious, so we scale the actual
-    sleep while still showing the backoff value the library calculated.
-    """
+    """Shorten retry waits while showing the calculated delay."""
     original_sleep = retry_module.time.sleep
 
     def scaled_sleep(seconds):
@@ -101,14 +96,11 @@ def main():
             except Exception as exc:
                 print(f"  failure: {exc}")
 
-                # should_dead_letter accepts the retry policy, so this script can
-                # make the cutoff explicit in its output.
+                # Apply this demo's retry limit.
                 if should_dead_letter(message, max_retries=max_retries):
                     print(f"  exceeded {max_retries} retries; moving {label} to dead_letter")
 
-                    # move_to_dead_letter currently uses the library default of
-                    # five attempts. Because max_retries is also five here, the
-                    # public helper performs the final queue move for us.
+                    # The helper moves exhausted jobs to dead_letter.
                     move_to_dead_letter(broker, message)
                 else:
                     print("  retrying with exponential backoff plus jitter")

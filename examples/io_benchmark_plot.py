@@ -33,8 +33,7 @@ results = RedisResultStore()
 
 @task
 def fetch_customer_profile(customer_id, latency=0.35):
-    # This simulates the shape of network I/O: most of the elapsed time is
-    # waiting on an external service, so threads can overlap the waits.
+    # Simulate network I/O that workers can overlap.
     time.sleep(latency)
     return {"customer_id": customer_id, "tier": "standard"}
 

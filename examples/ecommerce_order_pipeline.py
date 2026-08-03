@@ -29,8 +29,7 @@ broker = RedisBroker(queue_name=QUEUE)
 configure(broker)
 results = RedisResultStore()
 
-# These lists are only for demo cleanup. Redis result keys are task IDs, so we
-# track the IDs we create and remove those hashes before exiting.
+# Track result keys so the demo can clean them up.
 task_ids = []
 
 
@@ -54,20 +53,17 @@ def enqueue_and_track(task_obj, *args, **kwargs):
 
 @task
 def charge_payment(order):
-    # In a real checkout flow this might call Stripe, Adyen, or a bank gateway.
-    # It is intentionally slow here to make the background value visible.
+    # Simulate a slow payment provider.
     time.sleep(0.35)
     print(f"  charged ${order['total']:.2f} for order {order['id']}")
 
-    # The task itself enqueues the next stage. Chaining keeps the web request
-    # fast while preserving a clear operational sequence.
+    # Queue the next pipeline stage.
     return enqueue_and_track(reserve_inventory, order)
 
 
 @task
 def reserve_inventory(order):
-    # Inventory writes are another classic background step: important, but not
-    # something the customer should sit and wait on after clicking checkout.
+    # Simulate a slow inventory update.
     time.sleep(0.25)
     print(f"  reserved {len(order['items'])} item(s) for order {order['id']}")
     return enqueue_and_track(send_confirmation, order)
@@ -75,8 +71,7 @@ def reserve_inventory(order):
 
 @task
 def send_confirmation(order):
-    # Email/SMS providers are network services. Queuing keeps provider hiccups
-    # from slowing down checkout.
+    # Simulate sending through an email provider.
     time.sleep(0.2)
     message = f"confirmation sent to {order['email']} for order {order['id']}"
     print(f"  {message}")
@@ -91,7 +86,7 @@ def main():
         {"id": "A1004", "email": "ava@example.com", "items": ["kettle"], "total": 45.25},
     ]
 
-    # Start clean so the before/after queue counts are meaningful.
+    # Clear results from earlier demo runs.
     broker.r.delete(QUEUE, "dead_letter")
 
     worker = WorkerPool(broker, num_workers=3)
@@ -103,10 +98,7 @@ def main():
 
         sync_start = time.time()
         for order in orders:
-            # The decorated task is directly callable, but these task functions
-            # intentionally enqueue the next pipeline stage. For a clean
-            # synchronous baseline, we simulate the same three slow operations
-            # without creating background work.
+            # Simulate the three stages without queueing work.
             time.sleep(0.35)
             time.sleep(0.25)
             time.sleep(0.2)
@@ -121,9 +113,7 @@ def main():
         print(f"After: customer-facing checkout enqueued {len(orders)} orders in {enqueue_elapsed:.3f}s.")
         print("Workers continue the chained payment -> inventory -> confirmation flow:\n")
 
-        # Waiting for the first stage proves the initial checkout work was accepted.
-        # The final confirmation tasks are created by later stages, so we wait until
-        # all tracked IDs have completed and the queue is empty.
+        # Later stages add task IDs as the pipeline continues.
         for task_id in first_stage_ids:
             wait_for_result(task_id)
 
