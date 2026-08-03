@@ -18,7 +18,7 @@ function QueueStatus() {
       }
       fetchQueueStatus()
 
-      const interval = setInterval(fetchQueueStatus, 5000)
+      const interval = setInterval(fetchQueueStatus, 1000)
       return () => clearInterval(interval)
     }, [])
 
@@ -31,17 +31,18 @@ function QueueStatus() {
     )
 }
 
-function EnqueueForm() {
+function EnqueueForm( { onEnqueue } ) {
   const [fnName, setFnName] = useState('')
   const [args, setArgs] = useState('')
   const handleSubmit = async () => {
   const parsedArgs = args.split(',').map(arg => arg.trim())
-  await axios.post('http://localhost:8000/task/enqueue', {
+  const response = await axios.post('http://localhost:8000/task/enqueue', {
     fn: fnName,
     args: parsedArgs,
     kwargs: {}
   })
-  // clear the form
+
+  onEnqueue(response.data.task_id)
   setFnName('')
   setArgs('')
 }
@@ -64,13 +65,46 @@ function EnqueueForm() {
     </div>
   )
 }
+function ResultFeed({ taskIds }) {
 
+  const [results, setResults] = useState([])
+
+  useEffect(() => { 
+    if (taskIds.length === 0) return () => {}
+    const fetchResults = async () => {
+      try {
+        const responses = await Promise.all(taskIds.map(id => axios.get(`http://localhost:8000/task/${id}`)))
+        setResults(responses.map(res => res.data))
+      } catch (error) {
+        console.error('Error fetching results:', error)
+      }
+    }
+    fetchResults()
+
+    const interval = setInterval(fetchResults, 1000)
+    return () => clearInterval(interval)
+  }, [taskIds])
+
+  return (
+    <div>
+      <h1>Task Results</h1>
+      <ul>
+        {results.map((result, index) => (
+          <li key={index}>{JSON.stringify(result)}</li>
+        ))}
+      </ul>
+    </div>
+  )
+}
 
 export default function App() {
+  const [taskIds, setTaskIds] = useState([])
+
   return (
     <div>
       <QueueStatus />
-      <EnqueueForm />
+      <EnqueueForm onEnqueue={(id) => setTaskIds(prev => [...prev, id])} />
+      <ResultFeed taskIds={taskIds} />
     </div>
   )
 }
