@@ -1,0 +1,6 @@
+pytask.egg-info/
+__pycache__/
+*.pyc
+results.db
+dump.rdb
+.env
