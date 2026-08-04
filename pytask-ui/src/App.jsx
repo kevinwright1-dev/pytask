@@ -1,5 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
+
+const BURST_COUNT = 30
+const TASK_FN = 'slow_task'
+const TASK_SLEEP = 1 // seconds each task sleeps
+const WORKER_COUNT = 9
 
 function QueueStatus() {
   const [pending, setPending] = useState(0)
@@ -141,6 +146,161 @@ function ResultFeed({ taskIds }) {
   )
 }
 
+function StatTile({ label, value, color = 'text-white' }) {
+  return (
+    <div className="bg-zinc-800 rounded-xl p-4 border border-zinc-700">
+      <p className="text-zinc-400 text-xs uppercase tracking-widest mb-1">{label}</p>
+      <p className={`text-3xl font-bold tabular-nums ${color}`}>{value}</p>
+    </div>
+  )
+}
+
+function BurstDemo() {
+  const [running, setRunning] = useState(false)
+  const [pending, setPending] = useState(0)
+  const [inFlight, setInFlight] = useState(0)
+  const [completed, setCompleted] = useState(0)
+  const [elapsedMs, setElapsedMs] = useState(0)
+  const [summary, setSummary] = useState(null)
+
+  const idsRef = useRef([])
+  const startRef = useRef(0)
+  const clockRef = useRef(null)
+  const pollRef = useRef(null)
+
+  const stopTimers = () => {
+    if (clockRef.current) clearInterval(clockRef.current)
+    if (pollRef.current) clearInterval(pollRef.current)
+    clockRef.current = null
+    pollRef.current = null
+  }
+
+  useEffect(() => stopTimers, [])
+
+  const poll = async () => {
+    try {
+      const [statusRes, taskResponses] = await Promise.all([
+        axios.get('http://localhost:8000/queue/status'),
+        Promise.all(
+          idsRef.current.map(id => axios.get(`http://localhost:8000/task/${id}`))
+        ),
+      ])
+      const done = taskResponses.filter(r => r.data.result !== null).length
+      const queuePending = statusRes.data.pending
+      setCompleted(done)
+      setPending(Math.min(queuePending, BURST_COUNT - done))
+      setInFlight(Math.max(0, BURST_COUNT - queuePending - done))
+
+      if (done >= BURST_COUNT) {
+        const parallelMs = performance.now() - startRef.current
+        const seqMs = BURST_COUNT * TASK_SLEEP * 1000
+        stopTimers()
+        setRunning(false)
+        setElapsedMs(parallelMs)
+        setPending(0)
+        setInFlight(0)
+        setSummary({ parallelMs, seqMs, speedup: seqMs / parallelMs })
+      }
+    } catch (error) {
+      console.error('Error polling burst status:', error)
+    }
+  }
+
+  const handleBurst = async () => {
+    if (running) return
+    stopTimers()
+    setSummary(null)
+    setCompleted(0)
+    setInFlight(0)
+    setPending(BURST_COUNT)
+    setElapsedMs(0)
+    setRunning(true)
+
+    startRef.current = performance.now()
+    const responses = await Promise.all(
+      Array.from({ length: BURST_COUNT }, () =>
+        axios.post('http://localhost:8000/task/enqueue', {
+          fn: TASK_FN,
+          args: [TASK_SLEEP],
+          kwargs: {},
+        })
+      )
+    )
+    idsRef.current = responses.map(r => r.data.task_id)
+
+    clockRef.current = setInterval(() => {
+      setElapsedMs(performance.now() - startRef.current)
+    }, 100)
+    pollRef.current = setInterval(poll, 300)
+  }
+
+  const seqMs = BURST_COUNT * TASK_SLEEP * 1000
+  const shownSeq = summary ? summary.seqMs : seqMs
+  const shownPar = summary ? summary.parallelMs : elapsedMs
+  const maxv = Math.max(shownSeq, shownPar || 1)
+
+  return (
+    <div className="bg-zinc-800 rounded-xl p-6 border border-zinc-700 mb-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-zinc-400 text-sm uppercase tracking-widest">Worker burst</h2>
+        <span className="text-zinc-500 text-xs">
+          {BURST_COUNT} × {TASK_FN}({TASK_SLEEP}s) · {WORKER_COUNT} workers
+        </span>
+      </div>
+
+      <div className="grid grid-cols-4 gap-3 mb-5">
+        <StatTile label="Pending" value={pending} />
+        <StatTile label="In-flight" value={inFlight} color="text-blue-400" />
+        <StatTile label="Completed" value={completed} color="text-green-400" />
+        <StatTile label="Elapsed" value={`${(elapsedMs / 1000).toFixed(1)}s`} />
+      </div>
+
+      <button
+        onClick={handleBurst}
+        disabled={running}
+        className="bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-600 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors mb-6"
+      >
+        {running ? 'Running…' : `Send ${BURST_COUNT} slow tasks`}
+      </button>
+
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <span className="text-zinc-400 text-xs w-20">1 worker</span>
+          <div className="flex-1 bg-zinc-900 rounded h-4 overflow-hidden">
+            <div
+              className="h-full bg-zinc-600 transition-all duration-300"
+              style={{ width: `${(shownSeq / maxv) * 100}%` }}
+            />
+          </div>
+          <span className="text-zinc-300 text-xs w-14 text-right tabular-nums">
+            {(shownSeq / 1000).toFixed(1)}s
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-zinc-400 text-xs w-20">{WORKER_COUNT} workers</span>
+          <div className="flex-1 bg-zinc-900 rounded h-4 overflow-hidden">
+            <div
+              className="h-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${shownPar ? (shownPar / maxv) * 100 : 0}%` }}
+            />
+          </div>
+          <span className="text-blue-300 text-xs w-14 text-right tabular-nums">
+            {shownPar ? `${(shownPar / 1000).toFixed(1)}s` : '—'}
+          </span>
+        </div>
+      </div>
+
+      {summary && (
+        <p className="text-green-400 text-sm mt-4">
+          {BURST_COUNT} tasks: {(summary.seqMs / 1000).toFixed(1)}s one at a time →{' '}
+          {(summary.parallelMs / 1000).toFixed(1)}s across {WORKER_COUNT} workers (
+          {summary.speedup.toFixed(1)}× faster)
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function App() {
   const [taskIds, setTaskIds] = useState([])
 
@@ -152,6 +312,7 @@ export default function App() {
           <p className="text-zinc-400 text-sm mt-1">distributed task queue dashboard</p>
         </div>
         <QueueStatus />
+        <BurstDemo />
         <EnqueueForm onEnqueue={(id) => setTaskIds(prev => [...prev, id])} />
         <ResultFeed taskIds={taskIds} />
       </div>
