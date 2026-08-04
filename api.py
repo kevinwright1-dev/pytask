@@ -75,6 +75,7 @@ def enqueue_batch(request: BatchRequest):
             "fn": task_request.fn,
             "args": task_request.args,
             "kwargs": task_request.kwargs,
+            "attempt": 0,
         }
         broker.enqueue(message)
         task_ids.append(task_id)

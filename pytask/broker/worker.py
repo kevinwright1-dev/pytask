@@ -1,6 +1,7 @@
 import threading
-
+from pytask.broker.retry import retry, should_dead_letter, move_to_dead_letter
 from .base import Broker
+from pytask.task import _registry
 from pytask.broker.result import RedisResultStore
 
 
@@ -38,16 +39,25 @@ class WorkerPool:
             if message is not None:
                 fn_name = message["fn"]
                 args = message["args"]
-                kwargs = message ["kwargs"]
+                kwargs = message["kwargs"]
 
-                from pytask.task import _registry
                 fn = _registry.get(fn_name)
                 if fn is None:
                     print(f"Unknown task: {fn_name}")
+                    self.result.save_result(message["task_id"], "FAILED", "Unknown task")
+                    move_to_dead_letter(self.broker, message)
                     continue
 
-                result = fn(*args, **kwargs)
-                self.result.save_result(message["task_id"], "SUCCESS", result)
+                try:
+                    result = fn(*args, **kwargs)
+                    self.result.save_result(message["task_id"], "SUCCESS", result)
+                except Exception as e:
+                    if should_dead_letter(message):
+                        self.result.save_result(message["task_id"], "FAILED", str(e))
+                        move_to_dead_letter(self.broker, message)
+                    else:
+                        self.result.save_result(message["task_id"], "RETRYING", str(e))
+                        retry(self.broker, message)
 
     def stop(self):
         """Ask all workers to exit and wait for the threads to finish."""

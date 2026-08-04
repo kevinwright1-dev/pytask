@@ -13,7 +13,7 @@ import examples.basic_usage
 
 broker = RedisBroker()
 configure(broker)
-worker = WorkerPool(broker, 3)
+worker = WorkerPool(broker, 9)
 worker.start()
 print('workers running - press Ctrl+C to stop')
 

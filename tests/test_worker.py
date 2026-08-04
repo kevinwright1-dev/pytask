@@ -1,8 +1,8 @@
-import sys
 import time
 from unittest.mock import Mock
 
 from pytask.broker.worker import WorkerPool
+from pytask.task import _registry
 
 
 class FakeResultStore:
@@ -35,7 +35,7 @@ def test_worker_pool_start_spins_up_configured_thread_count(monkeypatch, mock_br
 def test_worker_dequeues_and_calls_main_function(monkeypatch, message):
     """Verify a worker resolves the named function and passes args and kwargs."""
     called = Mock(return_value=6)
-    monkeypatch.setattr(sys.modules["__main__"], "sample_task", called, raising=False)
+    monkeypatch.setitem(_registry, "sample_task", called)
     monkeypatch.setattr("pytask.broker.worker.RedisResultStore", FakeResultStore)
 
     class OneMessageBroker:
@@ -89,7 +89,7 @@ def test_worker_start_stop_has_no_hanging_threads(monkeypatch):
 
 def test_worker_saves_successful_result(monkeypatch, message):
     """Verify successful task execution is persisted through the result store."""
-    monkeypatch.setattr(sys.modules["__main__"], "sample_task", lambda *args, **kwargs: 6, raising=False)
+    monkeypatch.setitem(_registry, "sample_task", lambda *args, **kwargs: 6)
     monkeypatch.setattr("pytask.broker.worker.RedisResultStore", FakeResultStore)
 
     class OneMessageBroker:
@@ -110,3 +110,36 @@ def test_worker_saves_successful_result(monkeypatch, message):
     pool._run()
 
     pool.result.save_result.assert_called_once_with("task-123", "SUCCESS", 6)
+
+
+def test_worker_dead_letters_unknown_task_immediately(monkeypatch, message):
+    """Verify unknown tasks are retained even before any retry attempts."""
+    monkeypatch.setattr("pytask.broker.worker.RedisResultStore", FakeResultStore)
+    message["fn"] = "missing_task"
+    monkeypatch.delitem(_registry, "missing_task", raising=False)
+
+    class OneMessageBroker:
+        def __init__(self):
+            self.pool = None
+            self.messages = [message]
+            self.queue_name = "default"
+            self.enqueued = []
+
+        def dequeue(self, timeout):
+            if self.messages:
+                return self.messages.pop(0)
+            self.pool.stop_event.set()
+            return None
+
+        def enqueue(self, queued_message):
+            self.enqueued.append((self.queue_name, queued_message))
+
+    broker = OneMessageBroker()
+    pool = WorkerPool(broker, num_workers=1)
+    broker.pool = pool
+
+    pool._run()
+
+    assert broker.enqueued == [("dead_letter", message)]
+    assert broker.queue_name == "default"
+    pool.result.save_result.assert_called_once_with("task-123", "FAILED", "Unknown task")

@@ -23,14 +23,8 @@ def should_dead_letter(message, max_retries=5):
 
 
 def move_to_dead_letter(broker, message):
-    """Move an exhausted message into the dead_letter queue."""
-
-    if should_dead_letter(message):
-
-        original = broker.queue_name
-        broker.queue_name = "dead_letter"
-        broker.enqueue(message)
-        broker.queue_name = original
+    """Move a terminally failed message into the dead_letter queue."""
+    broker.enqueue(message, queue_name="dead_letter")
 
 
     

@@ -38,15 +38,12 @@ def test_should_dead_letter_compares_attempt_to_max_retries():
     assert should_dead_letter({"attempt": 5}, max_retries=5) is True
 
 
-def test_move_to_dead_letter_enqueues_only_when_retries_exhausted(mock_broker, message):
-    """Verify only exhausted messages are moved into the dead-letter queue."""
-    move_to_dead_letter(mock_broker, {**message, "attempt": 4})
-    mock_broker.enqueue.assert_not_called()
+def test_move_to_dead_letter_enqueues_terminal_message_regardless_of_attempt(mock_broker, message):
+    """Verify the caller can dead-letter non-retryable failures immediately."""
+    terminal = {**message, "attempt": 0}
+    move_to_dead_letter(mock_broker, terminal)
 
-    exhausted = {**message, "attempt": 5}
-    move_to_dead_letter(mock_broker, exhausted)
-
-    mock_broker.enqueue.assert_called_once_with(exhausted)
+    mock_broker.enqueue.assert_called_once_with(terminal)
 
 
 def test_move_to_dead_letter_restores_original_queue_name(mock_broker, message):

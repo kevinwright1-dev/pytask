@@ -14,12 +14,11 @@ class RedisBroker(Broker):
         self.r = redis.Redis(host=host, port=port)
         self.queue_name = queue_name
 
-    def enqueue(self, message):
-        """Serialize and push one task message onto the configured queue."""
-
-
+    def enqueue(self, message, queue_name=None):
+        """Serialize and push one task message onto the requested queue."""
         message_json = json.dumps(message)
-        self.r.lpush(self.queue_name, message_json)
+        target_queue = queue_name or self.queue_name
+        self.r.lpush(target_queue, message_json)
 
     def dequeue(self, timeout):
         """Block for work until timeout, then return a decoded message or None."""
