@@ -3,7 +3,7 @@ import axios from 'axios'
 
 const BURST_COUNT = 30
 const TASK_FN = 'slow_task'
-const TASK_SLEEP = 1 // seconds each task sleeps
+const TASK_SLEEP = 1 
 const WORKER_COUNT = 9
 
 function QueueStatus() {
@@ -193,7 +193,7 @@ function BurstDemo() {
 
       if (done >= BURST_COUNT) {
         const parallelMs = performance.now() - startRef.current
-        const seqMs = BURST_COUNT * TASK_SLEEP * 1000
+        const seqMs = taskResponses.reduce((sum, r) => sum + (r.data.result?.duration ?? 0), 0) * 1000
         stopTimers()
         setRunning(false)
         setElapsedMs(parallelMs)
@@ -300,6 +300,44 @@ function BurstDemo() {
     </div>
   )
 }
+function WorkerLanes() {
+  const [workers, setWorkers] = useState([])
+
+  useEffect(() => {
+    const fetchWorkers = async () => {
+      try {
+        const res = await axios.get('http://localhost:8000/workers')
+        setWorkers(res.data.workers)
+      } catch (error) {
+        console.error('Error fetching workers:', error)
+      }
+    }
+    fetchWorkers()
+    const interval = setInterval(fetchWorkers, 400)   // faster than the 1s polls so lanes feel live
+    return () => clearInterval(interval)
+  }, [])
+
+  return (
+    <div className="bg-zinc-800 rounded-xl p-6 border border-zinc-700 mb-6">
+      <h2 className="text-zinc-400 text-sm uppercase tracking-widest mb-4">Worker lanes</h2>
+      <div className="grid grid-cols-3 gap-3">
+        {workers.map(w => (
+          <div
+            key={w.worker_id}
+            className={`rounded-lg p-3 border min-h-[60px] flex flex-col justify-center transition-colors ${
+              w.busy ? 'bg-blue-900/40 border-blue-500' : 'bg-zinc-900 border-zinc-700'
+            }`}
+          >
+            <p className="text-xs text-zinc-500 mb-1">worker {w.worker_id}</p>
+            <p className={`text-xs truncate ${w.busy ? 'text-blue-300' : 'text-zinc-600'}`}>
+              {w.busy ? `${w.task.fn} · ${w.task.task_id.slice(0, 8)}` : 'idle'}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export default function App() {
   const [taskIds, setTaskIds] = useState([])
@@ -312,6 +350,7 @@ export default function App() {
           <p className="text-zinc-400 text-sm mt-1">distributed task queue dashboard</p>
         </div>
         <QueueStatus />
+        <WorkerLanes />
         <BurstDemo />
         <EnqueueForm onEnqueue={(id) => setTaskIds(prev => [...prev, id])} />
         <ResultFeed taskIds={taskIds} />
