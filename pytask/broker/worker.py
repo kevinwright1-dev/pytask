@@ -1,4 +1,6 @@
 import threading
+import time
+import json
 from pytask.broker.retry import retry, should_dead_letter, move_to_dead_letter
 from .base import Broker
 from pytask.task import _registry
@@ -25,38 +27,47 @@ class WorkerPool:
     def start(self):
         """Start the configured number of worker threads."""
 
+        self.result.r.delete("workers")
         for i in range(self.num_workers):
-            t = threading.Thread(target=self._run)
+            t = threading.Thread(target=self._run, args = (i,))
             t.start()
             self.threads.append(t)
 
-    def _run(self):
+    def _run(self, worker_id):
         """Worker loop: dequeue one message, execute it, persist the result."""
 
         while not self.stop_event.is_set():
 
+            self.result.r.hset("workers", worker_id, json.dumps(None))
+
             message = self.broker.dequeue(timeout=2)
+
             if message is not None:
                 fn_name = message["fn"]
                 args = message["args"]
                 kwargs = message["kwargs"]
 
                 fn = _registry.get(fn_name)
+               
                 if fn is None:
                     print(f"Unknown task: {fn_name}")
                     self.result.save_result(message["task_id"], "FAILED", "Unknown task")
                     move_to_dead_letter(self.broker, message)
                     continue
+                started_at = time.time()
+                self.result.r.hset("workers", worker_id, json.dumps({"task_id": message["task_id"], "fn": fn_name, "started_at": started_at}))
 
                 try:
                     result = fn(*args, **kwargs)
-                    self.result.save_result(message["task_id"], "SUCCESS", result)
+                    duration = time.time() - started_at
+                    self.result.save_result(message["task_id"], "SUCCESS", result, duration)
                 except Exception as e:
+                    duration = time.time() - started_at
                     if should_dead_letter(message):
-                        self.result.save_result(message["task_id"], "FAILED", str(e))
+                        self.result.save_result(message["task_id"], "FAILED", str(e), duration)
                         move_to_dead_letter(self.broker, message)
                     else:
-                        self.result.save_result(message["task_id"], "RETRYING", str(e))
+                        self.result.save_result(message["task_id"], "RETRYING", str(e), duration)
                         retry(self.broker, message)
 
     def stop(self):

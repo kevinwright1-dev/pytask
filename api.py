@@ -4,6 +4,7 @@ from pytask.broker.redis import RedisBroker
 from pytask.broker.result import RedisResultStore
 from pytask.task import configure
 import uuid
+import json
 
 app = FastAPI()
 
@@ -80,3 +81,17 @@ def enqueue_batch(request: BatchRequest):
         broker.enqueue(message)
         task_ids.append(task_id)
     return {"task_ids": task_ids}
+
+@app.get("/workers")
+def get_workers():
+    raw = broker.r.hgetall("workers")
+    workers = []
+    for wid, info_bytes in raw.items():
+        info = json.loads(info_bytes)          # None = idle, dict = busy
+        workers.append({
+            "worker_id": int(wid.decode()),    # b"3" -> 3
+            "busy": info is not None,
+            "task": info,                      # None, or {task_id, fn, started_at}
+        })
+    workers.sort(key=lambda w: w["worker_id"])
+    return {"workers": workers}

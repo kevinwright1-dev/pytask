@@ -12,7 +12,7 @@ class ResultStore(ABC):
     """
 
     @abstractmethod
-    def save_result(self, task_id, status, value):
+    def save_result(self, task_id, status, value, duration=None):
         """Persist one task's final status and return value."""
         ...
 
@@ -28,10 +28,10 @@ class RedisResultStore(ResultStore):
 
         self.r = redis.Redis(host=host, port=port)
 
-    def save_result(self, task_id, status, value):
+    def save_result(self, task_id, status, value, duration = None):
         """Save a result payload that can later be fetched by task id."""
 
-        self.r.hset(task_id, mapping={"status": status, "value": json.dumps(value)})
+        self.r.hset(task_id, mapping={"status": status, "value": json.dumps(value), "duration": json.dumps(duration)})
 
     def get_result(self, task_id):
         """Load and decode one Redis result hash."""
@@ -41,7 +41,8 @@ class RedisResultStore(ResultStore):
             return None
         return {
             "status": result[b"status"].decode(),
-            "value": json.loads(result[b"value"])
+            "value": json.loads(result[b"value"]),
+            "duration": json.loads(result[b"duration"]) if result.get(b"duration") is not None else None
         }
 
 class SQLiteResultStore(ResultStore):
@@ -57,16 +58,17 @@ class SQLiteResultStore(ResultStore):
         statement = """CREATE TABLE IF NOT EXISTS tasks (
                         task_id text PRIMARY KEY,
                         status text NOT NULL,
-                        value text
+                        value text,
+                        duration text
                     );"""
         self.cursor = self.conn.cursor()
         self.cursor.execute(statement)
 
-    def save_result(self, task_id, status, value):
+    def save_result(self, task_id, status, value, duration=None):
         """Insert or update the result for a task id."""
 
-        sql = "INSERT OR REPLACE INTO tasks(task_id, status, value) VALUES(?,?,?)"
-        self.cursor.execute(sql,(task_id, status, json.dumps(value)))
+        sql = "INSERT OR REPLACE INTO tasks(task_id, status, value, duration) VALUES(?,?,?,?)"
+        self.cursor.execute(sql, (task_id, status, json.dumps(value), json.dumps(duration)))
         self.conn.commit()
 
     def get_result(self, task_id):
@@ -80,5 +82,6 @@ class SQLiteResultStore(ResultStore):
         return {
             "task_id": row[0],
             "status": row[1],
-            "value": row[2]
+            "value": json.loads(row[2]),
+            "duration": json.loads(row[3]) if row[3] is not None else None
         }
