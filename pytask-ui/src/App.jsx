@@ -169,6 +169,7 @@ function BurstDemo() {
   const startRef = useRef(0)
   const clockRef = useRef(null)
   const pollRef = useRef(null)
+  const pollInProgressRef = useRef(false)
 
   const stopTimers = () => {
     if (clockRef.current) clearInterval(clockRef.current)
@@ -180,18 +181,27 @@ function BurstDemo() {
   useEffect(() => stopTimers, [])
 
   const poll = async () => {
+    if (pollInProgressRef.current || idsRef.current.length === 0) return
+    pollInProgressRef.current = true
+
     try {
-      const [statusRes, taskResponses] = await Promise.all([
+      const responses = await Promise.allSettled([
         axios.get(`${API_URL}/queue/status`),
-        Promise.all(
-          idsRef.current.map(id => axios.get(`${API_URL}/task/${id}`))
-        ),
+        ...idsRef.current.map(id => axios.get(`${API_URL}/task/${id}`)),
       ])
+      const statusResponse = responses[0]
+      const taskResponses = responses
+        .slice(1)
+        .filter(response => response.status === 'fulfilled')
+        .map(response => response.value)
       const done = taskResponses.filter(r => r.data.result !== null).length
-      const queuePending = statusRes.data.pending
       setCompleted(done)
-      setPending(Math.min(queuePending, BURST_COUNT - done))
-      setInFlight(Math.max(0, BURST_COUNT - queuePending - done))
+
+      if (statusResponse.status === 'fulfilled') {
+        const queuePending = statusResponse.value.data.pending
+        setPending(Math.min(queuePending, BURST_COUNT - done))
+        setInFlight(Math.max(0, BURST_COUNT - queuePending - done))
+      }
 
       if (done >= BURST_COUNT) {
         const parallelMs = performance.now() - startRef.current
@@ -205,6 +215,8 @@ function BurstDemo() {
       }
     } catch (error) {
       console.error('Error polling burst status:', error)
+    } finally {
+      pollInProgressRef.current = false
     }
   }
 
@@ -233,7 +245,8 @@ function BurstDemo() {
     clockRef.current = setInterval(() => {
       setElapsedMs(performance.now() - startRef.current)
     }, 100)
-    pollRef.current = setInterval(poll, 300)
+    poll()
+    pollRef.current = setInterval(poll, 1000)
   }
 
   const seqMs = BURST_COUNT * TASK_SLEEP * 1000
