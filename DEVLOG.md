@@ -131,3 +131,25 @@ The worker test that checks the thread count was tricky to read because it monke
 
 ### Decision I made:
 I used Codex to write the tests since test writing was not the main thing I was trying to learn on this project. But I made sure to read every test and understand what it was checking before moving on. Going forward I want to write tests myself so I get more practice with pytest fixtures and monkeypatching.
+
+## 2026-08-27
+
+### What I worked on:
+Today I prepared the dashboard for deployment with Vercel for the frontend and Render for the API, worker, and Redis-compatible Key Value service.
+
+I changed both `RedisBroker` and `RedisResultStore` to read a `REDIS_URL` environment variable and connect with `redis.Redis.from_url()`. They still default to `redis://localhost:6379`, so local development works without environment configuration.
+
+I changed the React dashboard to read `VITE_API_URL`, with `http://localhost:8000` as the local fallback. Every frontend API request now uses that shared base URL instead of a hardcoded localhost address.
+
+I also made the worker-burst demo safer for a small hosted Redis instance. Polling is now limited to one request cycle at a time, runs once per second instead of every 300 milliseconds, and retries on the next cycle when a request fails.
+
+Finally, I changed the burst to use batch endpoints. The frontend submits all 30 demo tasks with one `POST /task/batch` request and polls their statuses with one `POST /tasks/results` request. The API now types batch tasks as `list[EnqueueRequest]` and provides `/tasks/results` to return a result for every requested task ID.
+
+### What I struggled with:
+The original burst demo made 30 task-result requests at once and repeated that work every 300 milliseconds. On Render's free Key Value instance, this created enough concurrent Redis connections to hit the service's client limit. The worker then failed to start even though the FastAPI server remained available, leaving queued tasks unprocessed.
+
+### Decision I made:
+I kept the existing single-task endpoints for the regular enqueue form and task-result feed, but used batch endpoints only for the fixed-size burst demonstration. This preserves the simple API while avoiding a connection spike during the visual concurrency demo.
+
+### What to do next:
+If the project grows beyond a demo, add authentication, restrict CORS to the deployed frontend domain, move the worker to its own always-running service, and use a persistent Redis-compatible datastore.
