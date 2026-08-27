@@ -28,7 +28,10 @@ class EnqueueRequest(BaseModel):
     kwargs: dict = {}
 
 class BatchRequest(BaseModel):
-    tasks: list  # list of EnqueueRequests
+    tasks: list[EnqueueRequest]
+
+class TaskResultsRequest(BaseModel):
+    task_ids: list[str]
 
 # endpoint 1
 @app.get("/queue/status")
@@ -61,6 +64,13 @@ def get_task(task_id: str):
     # return it
     result = result_store.get_result(task_id)
     return {"task_id": task_id, "result": result}
+
+@app.post("/tasks/results")
+def get_task_results(request: TaskResultsRequest):
+    tasks = []
+    for task_id in request.task_ids:
+        tasks.append({"task_id": task_id, "result": result_store.get_result(task_id)})
+    return {"tasks": tasks}
 
 # endpoint 4
 @app.post("/task/batch")

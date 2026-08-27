@@ -185,16 +185,14 @@ function BurstDemo() {
     pollInProgressRef.current = true
 
     try {
-      const responses = await Promise.allSettled([
+      const [statusResponse, resultsResponse] = await Promise.allSettled([
         axios.get(`${API_URL}/queue/status`),
-        ...idsRef.current.map(id => axios.get(`${API_URL}/task/${id}`)),
+        axios.post(`${API_URL}/tasks/results`, { task_ids: idsRef.current }),
       ])
-      const statusResponse = responses[0]
-      const taskResponses = responses
-        .slice(1)
-        .filter(response => response.status === 'fulfilled')
-        .map(response => response.value)
-      const done = taskResponses.filter(r => r.data.result !== null).length
+      const taskResults = resultsResponse.status === 'fulfilled'
+        ? resultsResponse.value.data.tasks
+        : []
+      const done = taskResults.filter(task => task.result !== null).length
       setCompleted(done)
 
       if (statusResponse.status === 'fulfilled') {
@@ -205,7 +203,7 @@ function BurstDemo() {
 
       if (done >= BURST_COUNT) {
         const parallelMs = performance.now() - startRef.current
-        const seqMs = taskResponses.reduce((sum, r) => sum + (r.data.result?.duration ?? 0), 0) * 1000
+        const seqMs = taskResults.reduce((sum, task) => sum + (task.result?.duration ?? 0), 0) * 1000
         stopTimers()
         setRunning(false)
         setElapsedMs(parallelMs)
@@ -231,16 +229,16 @@ function BurstDemo() {
     setRunning(true)
 
     startRef.current = performance.now()
-    const responses = await Promise.all(
-      Array.from({ length: BURST_COUNT }, () =>
-        axios.post(`${API_URL}/task/enqueue`, {
+    const response = await axios.post(`${API_URL}/task/batch`, {
+      tasks: Array.from({ length: BURST_COUNT }, () =>
+        ({
           fn: TASK_FN,
           args: [TASK_SLEEP],
           kwargs: {},
         })
-      )
-    )
-    idsRef.current = responses.map(r => r.data.task_id)
+      ),
+    })
+    idsRef.current = response.data.task_ids
 
     clockRef.current = setInterval(() => {
       setElapsedMs(performance.now() - startRef.current)
