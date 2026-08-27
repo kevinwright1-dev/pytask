@@ -55,6 +55,64 @@ task_id = send_email.delay("user@example.com", "Welcome")
 worker.stop()
 ```
 
+## Deployment
+
+The dashboard is deployed as a Vite app on Vercel, while the FastAPI API and
+Redis-compatible queue run on Render.
+
+```text
+Vercel dashboard -> Render FastAPI API -> Render Key Value -> worker process
+```
+
+### Environment variables
+
+Set the same Redis connection URL for the API and worker process:
+
+```text
+REDIS_URL=redis://YOUR-RENDER-KEY-VALUE-HOST:6379
+```
+
+Set the deployed API URL in the Vercel project:
+
+```text
+VITE_API_URL=https://YOUR-API.onrender.com
+```
+
+When these variables are absent, the project continues to use
+`redis://localhost:6379` and `http://localhost:8000` for local development.
+
+### Render API service
+
+Create a Python Web Service from the repository root with:
+
+```text
+Build Command: pip install redis rich fastapi "uvicorn[standard]" requests matplotlib
+Start Command: uvicorn api:app --host 0.0.0.0 --port $PORT
+```
+
+For a free demo deployment, the API and worker can share one Web Service:
+
+```text
+sh -c 'python worker_server.py & exec uvicorn api:app --host 0.0.0.0 --port "$PORT"'
+```
+
+For a reliable production deployment, run `python worker_server.py` as a
+separate always-running worker service instead. Free Render Web Services can
+sleep when idle, so the combined command is intended only for demonstrations.
+
+### Vercel dashboard
+
+Import the repository into Vercel with `pytask-ui` as the Root Directory.
+Vercel detects Vite; use `npm run build` as the build command and `dist` as
+the output directory. Add `VITE_API_URL` before deploying so browser requests
+reach the Render API rather than the visitor's localhost.
+
+### Burst demo
+
+The 30-task burst uses batch API requests: one request enqueues the batch and
+one request polls all task results. This avoids opening a separate Redis-backed
+HTTP request for every task, which is important on small hosted Redis plans.
+
 ## Examples
 
 Each example is self-contained and runnable. They demonstrate real use cases,
