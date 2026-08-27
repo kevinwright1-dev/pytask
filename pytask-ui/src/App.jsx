@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
 const BURST_COUNT = 30
 const TASK_FN = 'slow_task'
 const TASK_SLEEP = 1 
@@ -13,7 +15,7 @@ function QueueStatus() {
   useEffect(() => {
     const fetchQueueStatus = async () => {
       try {
-        const response = await axios.get('http://localhost:8000/queue/status')
+        const response = await axios.get(`${API_URL}/queue/status`)
         setPending(response.data.pending)
         setDeadLetter(response.data.dead_letter)
       } catch (error) {
@@ -44,7 +46,7 @@ function EnqueueForm({ onEnqueue }) {
 
   const handleSubmit = async () => {
     const parsedArgs = args.split(',').map(arg => arg.trim())
-    const response = await axios.post('http://localhost:8000/task/enqueue', {
+    const response = await axios.post(`${API_URL}/task/enqueue`, {
       fn: fnName,
       args: parsedArgs,
       kwargs: {}
@@ -91,7 +93,7 @@ function ResultFeed({ taskIds }) {
     const fetchResults = async () => {
       try {
         const responses = await Promise.all(
-          taskIds.map(id => axios.get(`http://localhost:8000/task/${id}`))
+          taskIds.map(id => axios.get(`${API_URL}/task/${id}`))
         )
         setResults(responses.map(res => res.data))
       } catch (error) {
@@ -180,9 +182,9 @@ function BurstDemo() {
   const poll = async () => {
     try {
       const [statusRes, taskResponses] = await Promise.all([
-        axios.get('http://localhost:8000/queue/status'),
+        axios.get(`${API_URL}/queue/status`),
         Promise.all(
-          idsRef.current.map(id => axios.get(`http://localhost:8000/task/${id}`))
+          idsRef.current.map(id => axios.get(`${API_URL}/task/${id}`))
         ),
       ])
       const done = taskResponses.filter(r => r.data.result !== null).length
@@ -219,7 +221,7 @@ function BurstDemo() {
     startRef.current = performance.now()
     const responses = await Promise.all(
       Array.from({ length: BURST_COUNT }, () =>
-        axios.post('http://localhost:8000/task/enqueue', {
+        axios.post(`${API_URL}/task/enqueue`, {
           fn: TASK_FN,
           args: [TASK_SLEEP],
           kwargs: {},
@@ -306,7 +308,7 @@ function WorkerLanes() {
   useEffect(() => {
     const fetchWorkers = async () => {
       try {
-        const res = await axios.get('http://localhost:8000/workers')
+        const res = await axios.get(`${API_URL}/workers`)
         setWorkers(res.data.workers)
       } catch (error) {
         console.error('Error fetching workers:', error)

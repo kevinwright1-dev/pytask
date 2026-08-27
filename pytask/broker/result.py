@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import json
+import os
 import redis
 import sqlite3
 
@@ -24,9 +25,10 @@ class ResultStore(ABC):
 class RedisResultStore(ResultStore):
     """Store task results in Redis hashes keyed by task id."""
 
-    def __init__(self, host="localhost", port=6379):
+    def __init__(self):
 
-        self.r = redis.Redis(host=host, port=port)
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+        self.r = redis.Redis.from_url(redis_url)
 
     def save_result(self, task_id, status, value, duration = None):
         """Save a result payload that can later be fetched by task id."""

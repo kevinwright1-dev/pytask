@@ -1,4 +1,5 @@
 import json
+import os
 import redis
 from .base import Broker
 
@@ -9,9 +10,10 @@ class RedisBroker(Broker):
     quickly and BRPOP can let workers wait efficiently until work arrives.
     """
 
-    def __init__(self, host="localhost", port=6379, queue_name="default"):
+    def __init__(self, queue_name="default"):
 
-        self.r = redis.Redis(host=host, port=port)
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+        self.r = redis.Redis.from_url(redis_url)
         self.queue_name = queue_name
 
     def enqueue(self, message, queue_name=None):
